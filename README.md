@@ -18,3 +18,5 @@ Example 3: COPYSYS.G4B (fd0) (hd0,0) DBLSPACE.BIN
 ATTRIB-related sub-routines: see their descriptions in ATTRIB.G4B (but simplified: target-path in COPYSYS.G4B is always '/')
 
 Returns: messages and variable 'result=1' if successfull, otherwise messages and 'result=0'
+
+BTW PBR-bootcode NOT written, but grub4dos wil boot without if 'chainloader /io.sys' is used
