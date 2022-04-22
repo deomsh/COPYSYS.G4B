@@ -5,7 +5,7 @@ COPYSYS.G4B v0.4 (20220422), by deomsh
 
 Function: copy MS-DOS' IO.SYS, MSDOS.SYS, COMMAND.COM and optional DRVSPACE.BIN/ DBLSPACE.BIN from ONE specified directory to target and set attributes
 
-Use: COPYSYS.G4B [DEVICE1]PATH1 DEVICE2 [DRVSPACE.BIN|DBLSPACE.BIN]
+Use: COPYSYS.G4B <[DEVICE1]PATH1> <DEVICE2> [DRVSPACE.BIN|DBLSPACE.BIN]
 
 Remarks: grubutil FAT needed. If source device is not given, from root-device. Short Names in PATH1 only! Third switch: file name only!
 
