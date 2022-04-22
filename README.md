@@ -19,4 +19,4 @@ ATTRIB-related sub-routines: see their descriptions in ATTRIB.G4B (but simplifie
 
 Returns: messages and variable 'result=1' if successfull, otherwise messages and 'result=0'
 
-BTW PBR-bootcode NOT written, but grub4dos wil boot without if 'chainloader /io.sys' is used
+BTW PBR-bootcode NOT written, but grub4dos wil boot IO.SYS without if 'chainloader /io.sys' is used
