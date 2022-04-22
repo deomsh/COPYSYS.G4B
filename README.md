@@ -15,4 +15,4 @@ Example 2: COPYSYS.G4B (fd1)/system/ (hd1,0) DRVSPACE.BIN
   
 Example 3: COPYSYS.G4B (fd0) (hd0,0) DBLSPACE.BIN
   
-ATTRIB-related sub-routines: see their descriptions in ATTRIB.G4B (but simplified: target-path in COPYSYS.G$B is always '/')
+ATTRIB-related sub-routines: see their descriptions in ATTRIB.G4B (but simplified: target-path in COPYSYS.G4B is always '/')
