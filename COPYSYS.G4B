@@ -6,6 +6,9 @@
 #-# Example 1: COPYSYS.G4B (hd0,0) (fd1)
 #-# Example 2: COPYSYS.G4B (fd1)/system/ (hd1,0) DRVSPACE.BIN
 #-# Example 3: COPYSYS.G4B (fd0) (hd0,0) DBLSPACE.BIN
+:---------------------------------------------------------------
+:: MAIN ROUTINE
+:---------------------------------------------------------------
 if "%~1"=="" && call :help && goto :eof
 setlocal && set *
 debug 1
@@ -38,7 +41,9 @@ if %done%<=7 && if not exist %device2%%%path2%msdos.sys && if exist %device2%%%p
 debug msg=3
 endlocal && set result=%result%
 goto :eof
-
+:---------------------------------------------------------------
+:: SUB-ROUTINES
+:---------------------------------------------------------------
 :fatcopy
 setlocal && set * && set "output=%output%"
 set source=%~f1
@@ -63,7 +68,7 @@ set path=%~p1
 set name=%~n1
 set ext=%~x1
 set mdbase=0x3000
-set basemem=%mdbase% * 0x200
+set /A basemem=%mdbase% * 0x200
 if not exist filesys && call :filesystem "%device%" &; if not /i %filesys:~0,3%==fat && endlocal && set result= && goto :eof
 if not exist output && call :bootblockbase "%device%"
 call :findpath "%path%" &; if %clusnum%==0 && endlocal && set result= && goto :eof
