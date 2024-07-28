@@ -224,7 +224,7 @@ echo Function: copy MS-DOS' IO.SYS, MSDOS.SYS, COMMAND.COM
 echo $[]          from ONE specified directory to target and set attributes
 echo $[]          Optional copy DRVSPACE.BIN/ DBLSPACE.BIN
 echo Use:      COPYSYS.G4B <[DEVICE1]PATH1> <DEVICE2> [<DRVSPACE.BIN|DBLSPACE.BIN>]
-echo Remarks: 
+echo Remarks:
 echo Grubutil FAT needed
 echo If source device is not given, from root-device
 echo Short File Names in PATH1 only
