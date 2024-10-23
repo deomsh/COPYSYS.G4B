@@ -28,6 +28,6 @@ BTW PBR-bootcode NOT written, but grub4dos wil boot IO.SYS without if 'chainload
 
 History
 v0.4.2:  
-New: comaptible with one File Allocation Table (number of FAT's = 1)  
+Protected against other number of File Allocation Tables than one or two (number of FAT's: 1 or 2)  
 
 v0.4.1: first published version
