@@ -1,4 +1,4 @@
-COPYSYS.G4B v0.4.1 (20220728), by deomsh
+COPYSYS.G4B v0.4.2 (20241018), by deomsh
 
 Function: copy MS-DOS' IO.SYS, MSDOS.SYS, COMMAND.COM and optional DRVSPACE.BIN/ DBLSPACE.BIN from ONE specified directory to target and set attributes
 
@@ -27,4 +27,7 @@ Returns: messages and variable 'result=1' if successfull, otherwise messages and
 BTW PBR-bootcode NOT written, but grub4dos wil boot IO.SYS without if 'chainloader /io.sys' is used
 
 History
+v0.4.2:  
+New: comaptible with one File Allocation Table (number of FAT's = 1)  
+
 v0.4.1: first published version
