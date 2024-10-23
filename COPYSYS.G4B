@@ -1,5 +1,5 @@
 !BAT
-#-#+ COPYSYS.G4B v0.4.1B (20240728), by deomsh
+#-#+ COPYSYS.G4B v0.4.2 (20241018), by deomsh
 #-#+ Function: copy MS-DOS' IO.SYS, MSDOS.SYS, COMMAND.COM and optional DRVSPACE.BIN/ DBLSPACE.BIN from ONE specified directory to target and set attributes
 #-#+ Use: COPYSYS.G4B <[DEVICE1]PATH1> <DEVICE2> [<DRVSPACE.BIN|DBLSPACE.BIN>]
 #-#+ Remarks: grubutil FAT needed. If source device is not given, from root-device. Short Names in PATH1 only! Third switch: file name only!
@@ -70,7 +70,7 @@ set ext=%~x1
 set mdbase=0x3000
 set /A basemem=%mdbase% * 0x200
 if not exist filesys && call :filesystem "%device%" &; if not /i "%filesys:~0,3%"=="fat" && endlocal && set result= && goto :eof
-if not exist output && call :bootblockbase "%device%"
+if not exist output && call :bootblockbase "%device%" &; if %result%==0 && endlocal && set result= && goto :eof
 call :findpath "%path%" &; if %clusnum%==0 && endlocal && set result= && goto :eof
 call :findfile "%name%%%ext%" &; if not exist entry && endlocal && set result= && goto :eof
 call :attributes "%~2"
@@ -188,6 +188,8 @@ set /A address=%base%+0xE
 read %address% > nul ;; set /A reserved=%@retval%&0xffff
 set /A address=%base%+0x10
 read %address% > nul ;; set /A numfats=%@retval%&0xff
+if not %numfats%>=1 && endlocal && echo Abort: number of fat's is zero && set result=0 && goto :eof
+if %numfats%>=3 && endlocal && echo Abort: %numfats% File Allocation Tables unsupported && set result=0 && goto :eof
 set /A address=%base%+0x11
 read %address% > nul ;; set /A rootentr=%@retval%&0xffff
 set /A address=%base%+0x13
@@ -219,7 +221,7 @@ endlocal && set dataarea=%dataarea% && set clussize=%clussize% && set root=%root
 goto :eof
 
 :help
-echo COPYSYS.G4B v0.4.1 (20240728), by deomsh
+echo COPYSYS.G4B v0.4.2 (20241018), by deomsh
 echo Function: copy MS-DOS' IO.SYS, MSDOS.SYS, COMMAND.COM
 echo $[]          from ONE specified directory to target and set attributes
 echo $[]          Optional copy DRVSPACE.BIN/ DBLSPACE.BIN
