@@ -1,43 +1,78 @@
 !BAT
-#-#+ COPYSYS.G4B v0.4.2 (20241018), by deomsh
-#-#+ Function: copy MS-DOS' IO.SYS, MSDOS.SYS, COMMAND.COM and optional DRVSPACE.BIN/ DBLSPACE.BIN from ONE specified directory to target and set attributes
-#-#+ Use: COPYSYS.G4B <[DEVICE1]PATH1> <DEVICE2> [<DRVSPACE.BIN|DBLSPACE.BIN>]
+#-#+ COPYSYS.G4B v0.5 (20241116), by deomsh
+#-#+ Function: copy MS-DOS' IO.SYS, MSDOS.SYS, COMMAND.COM and optional DRVSPACE.BIN/ DBLSPACE.BIN or ONE other file from ONE specified directory to target and set attributes (not fot 'other' file)
+#-#+ Use: COPYSYS.G4B <[DEVICE1]PATH1> <DEVICE2> [<DRVSPACE.BIN|DBLSPACE.BIN|somefile>]
 #-#+ Remarks: grubutil FAT needed. If source device is not given, from root-device. Short Names in PATH1 only! Third switch: file name only!
 #-# Example 1: COPYSYS.G4B (hd0,0) (fd1)
 #-# Example 2: COPYSYS.G4B (fd1)/system/ (hd1,0) DRVSPACE.BIN
 #-# Example 3: COPYSYS.G4B (fd0) (hd0,0) DBLSPACE.BIN
+#-# Example 4: COPYSYS.G4B (fd0) (rd) SYS.COM
 :---------------------------------------------------------------------------------------------------------------------------
 : MAIN ROUTINE
 :---------------------------------------------------------------------------------------------------------------------------
-if "%~1"=="" && call :help && goto :eof
+if not exist @uefi &; setlocal && set /a version=*0x8278&0xFFFFFFFF > nul &; if %version%>=20170505 && endlocal ! echo Grub4dos version %version% too old, use version 20170505 or later && endlocal && goto :eof
+if not "%~1"=="" if not "%~1"=="/?" || call :help && goto :eof
+if "%~2"=="" && echo Target is missing on command-line && goto :eof
+if "%~dp1"=="%~dp2" && echo Source and Target are equal && goto :eof
 setlocal && set *
+debug status > nul ;; set debugsts=%@retval%
 debug 1
 debug msg=0
+delmod -l fat > nul || insmod %~dp0fat > nul || insmod (bd)/fat > nul || insmod (bd)/boot/grub/fat > nul || insmod (bd)/grub/fat > nul || insmod (bd)/g4dll/fat > nul || insmod /fat > nul || insmod /boot/grub/fat > nul || insmod /grub/fat > nul || insmod /g4dll/fat > nul || echo && FAT not found => fatcopy.g4b /? && echo && goto :eov
 set device1=%~d1
 set path1=%~p1
-if not exist %device1%%%path1%io.sys if not exist %device1%%%path1%msdos.sys if not exist %device1%%%path1%command.com && echo Abort: one or more MS-DOS system files not found in %device1%%%path1% && endlocal && set result=0 && goto :eof
-if not "%~3"=="" && if not exist %device1%%%path1%%%~3 && echo Abort: %~3 is not found in %device1%%%path1% && endlocal && set result=0 && goto :eof
-set device2=%~d2 &; fat info %device2% > nul |; echo Abort: Target %device2% does not exist or is not a fat-device && endlocal && set result=0 && goto :eof
+if not exist %device1%%%path1%io.sys if not exist %device1%%%path1%msdos.sys if not exist %device1%%%path1%command.com && echo Abort: one or more MS-DOS system files not found in %device1%%%path1% && set result=0 && goto :eov
+if not "%~3"=="" && if not exist %device1%%%path1%%%~3 && echo Abort: %~3 is not found in %device1%%%path1% && set result=0 && goto :eov
+set device2=%~d2 &; fat info %device2% > nul |; echo Abort: Target %device2% does not exist or is not a fat-device && set result=0 && goto :eov
 set path2=/
-#NOT#set path2=%~p2
-if not "%path2%"=="/" && echo Target %device2%%%path2% is not valid && endlocal && set result=0 && goto :eof
+if not "%path2%"=="/" && echo Target %device2%%%path2% is not a valid path && set result=0 && goto :eov
+## Check MS-DOS version <=6.22 and if target is not fAT32 shift root up if not full
+raw cat --length=0 %device1%%%path1%msdos.sys > nul &; if not %@retval%<=4k && set MSDOS=OLDDOS && setlocal && call :filesystem "%device2%" &; if /i %filesys%==fat32 && if %MSDOS%==OLDDOS && endlocal && echo MS-DOS system on source %device1% is <= MS-DOS 6.22: can not be used on FAT32-target %device2% && set result=0 && goto :eov ! if /i %filesys:~0,3%==fat && endlocal && set filesysT=%filesys% ! endlocal && echo Abort: target %device2% is not a valid FAT-device && set result=0 && goto :eov
+if %MSDOS%==OLDDOS && if not /i %filesys%==fat32 && ls %device2%/ > nul && echo Abort: can not shift Directory-entries in root of %device2% to make room for system files on MS-DOS <= 6.22 && goto :eov
+if %MSDOS%==OLDDOS && if not /i %filesys%==fat32 && call :shiftrootentries "%device2%" &; if %result%==0 && echo Abort: can not shift Directory-entries in root of %device2% to make room for system files on MS-DOS <= 6.22 && goto :eov
+## Ask to overwite MSDOS.SYS on target, if exists
+if exist %device2%%%path2%msdos.sys &; set /p:180 /u "newmsdos=%device2%%%path2%MSDOS.SYS exists: overwrite? (Y=yes, N=No)> " && echo ! echo &; if not %newmsdos%==Y && set newmsdos=N
+## Copy IO.SYS
 call :fatcopy "%device1%%%path1%io.sys" "%device2%%%path2%io.sys" &; if %success%==Y && set done=1 && set success=
+## Copy MSDOS.SYS if needed
 if %done%==1 && if not exist %device2%%%path2%msdos.sys && call :fatcopy "%device1%%%path1%msdos.sys" "%device2%%%path2%msdos.sys" &; if %success%==Y && set /a done=%done%+1 && set success=
-if %done%==1 && if exist %device2%%%path2%msdos.sys && call :fatcopy "%device2%%%path2%msdos.sys" "%device2%%%path2%msdos.bak" &; if %success%==Y && set /a done=%done%+1 && set success=
+if %done%==1 && if exist %device2%%%path2%msdos.sys && if %newmsdos%==Y && call :fatcopy "%device1%%%path1%msdos.sys" "%device2%%%path2%msdos.sys" &; if %success%==Y && set /a done=%done%+1 && set success=
+if %done%==1 && if exist %device2%%%path2%msdos.sys && if %newmsdos%==N && set /a done=%done%+1 && set success=
 if %done%==2 && if "%~3"=="" && set /a done=%done%+1
+## Copy third file if specified
+if %done%==2 && if not "%~3"=="" && call :fatcopy "%device1%%%path1%%%~3" "%device2%%%path2%%%~3" &; if %success%==Y && set /a done=%done%+1 && set success=
+## Copy COMMAND.COM
 if %done%==3 && call :fatcopy "%device1%%%path1%command.com" "%device2%%%path2%command.com" &; if %success%==Y && set /a done=%done%+1 && set success=
-if %done%==4 && call :setattrib "%device2%%%path2%io.sys" "-a+r+s+h" &; if not exist result && echo attributes of IO.SYS not set ! set /a done=%done%+1
-if %done%==5 && set result= && call :setattrib "%device2%%%path2%msdos.sys" "-a+r+s+h" &; if not exist result && echo attributes of MSDOS.SYS not set ! set /a done=%done%+1
-if %done%==6 && if not "%~3"=="" && set result= && call :setattrib "%device2%%%path2%%%~3" "-a+r+s+h" &; if not exist result && echo attributes of %~3 not set ! set /a done=%done%+1
+## Get/ set source attribute and date/ time for IO.SYS
+if %done%==4 && set entry1= && fat info %device1% > nul && call :getsourceentry "%device1%%%path1%io.sys" &; if not exist result && echo Directory-entry "%device1%%%path1%IO.SYS" not found ! set entry1=%result% && set result=
+if %done%==4 && call :setattrib "%device2%%%path2%io.sys" "-a+r+s+h" "%device1%%%path1%io.sys" "+m+l" "%entry1%" &; if not exist result && echo Attributes of %device2%%%path2%IO.SYS not set ! set /a done=%done%+1
+## Get/ set source attribute and date/ time for MSDOS.SYS if needed
+if %done%==5 && set entry1= && fat info %device1% > nul && if not %newmsdos%==N && call :getsourceentry "%device1%%%path1%msdos.sys" &; if not exist result && echo Directory-entry "%device1%%%path1%MSDOS.SYS" not found ! set entry1=%result% && set result=
+if %done%==5 && if not %newmsdos%==N && call :setattrib "%device2%%%path2%msdos.sys" "-a+r+s+h" "%device1%%%path1%msdos.sys" "+m+l" "%entry1%" &; if not exist result && echo Attributes of %device2%%%path2%MSDOS.SYS not set ! set /a done=%done%+1
+if %done%==5 && if exist %device2%%%path2%msdos.sys && if %newmsdos%==N && set /a done=%done%+1 && set success=
+## Get/ set source attribute and date/ time for DRVSPACE.BIN/DBLSPACE.BIN/somefile if specified
 if %done%==6 && if "%~3"=="" && set /a done=%done%+1
-if %done%==7 && set result= && call :setattrib "%device2%%%path2%command.com" "-a+r" &; if not exist result && echo attributes of COMMAND.COM not set ! set /a done=%done%+1
-if %done%==8 && echo MS-DOS system files transferred succesfully, all attributes set accordingly && set result=1 ! echo Abort: MS-DOS system files transfer failed, wait for deleting partial copy... && set result=0
-if %done%==7 &; if "%~3"=="" && set done=6 ! set result= && call :setattrib "%device2%%%path2%%%~3" "-r" && set done=6
-if %done%==6 && set result= && call :setattrib "%device2%%%path2%msdos.sys" "-r" &; set done=5
-if %done%==5 && set result= && call :setattrib "%device2%%%path2%io.sys" "-r" &; set done=4
-if not "%~3"=="" &; if %done%==1 && fat del %device2%%%path2%io.sys ! if %done%==2 && fat del %device2%%%path2%io.sys && fat del %device2%%%path2%msdos.sys ! if %done%==3 && fat del %device2%%%path2%io.sys && fat del %device2%%%path2%msdos.sys && fat del %device2%%%path2%%%~3 ! if %done%==4 && fat del %device2%%%path2%io.sys && fat del %device2%%%path2%msdos.sys && fat del %device2%%%path2%%%~3 && fat del %device2%%%path2%command.com
-if "%~3"=="" &; if %done%==1 && fat del %device2%%%path2%io.sys ! if %done%==2 && fat del %device2%%%path2%io.sys && fat del %device2%%%path2%msdos.sys ! if %done%==4 && fat del %device2%%%path2%io.sys && fat del %device2%%%path2%msdos.sys && fat del %device2%%%path2%drvspace.bin && fat del %device2%%%path2%command.com
-if %done%<=7 && if not exist %device2%%%path2%msdos.sys && if exist %device2%%%path2%msdos.bak && call :fatcopy "%device2%%%path2%msdos.bak" "%device2%%%path2%msdos.sys" &; if %success%==Y && call :attrib "%device2%%%path2%msdos.sys" "+r+s+h" &; set result=0
+if %done%==6 && set entry1= &; if not /i "%~3"=="DBLSPACE.BIN" if not /i "%~3"=="DRVSPACE.BIN" |; fat info %device1% > nul && call :getsourceentry "%device1%%%path1%%%~3" &; if not exist result && echo Directory-entry "%device1%%%path1%%%~3" not found ! set entry1=%result% && set result=
+if %done%==6 &; if not /i "%~3"=="DBLSPACE.BIN" if not /i "%~3"=="DRVSPACE.BIN" |; call :setattrib "%device2%%%path2%%%~3" "-a+r+s+h" "%device1%%%path1%%%~3" "+m+l" "%entry1%" &; if not exist result && echo Attributes of %device2%%%path2%%%~3 not set ! set /a done=%done%+1
+if %done%==6 && set entry1= && if not "%~3"=="" && fat info %device1% > nul && call :getsourceentry "%device1%%%path1%%%~3" &; if not exist result && echo Directory-entry "%device1%%%path1%%%~3" not found ! set entry1=%result% && set result=
+if %done%==6 && if not "%~3"=="" && call :setattrib "%device2%%%path2%%%~3" "+a" "%device1%%%path1%%%~3" "+m+l" "%entry1%" &; if not exist result && echo Attributes of %device2%%%path2%%%~3 not set ! set /a done=%done%+1
+## Get/ set source attribute and date/ time for COMMAND.COM
+if %done%==7 && set entry1= && fat info %device1% > nul && call :getsourceentry "%device1%%%path1%command.com" &; if not exist result && echo Directory-entry "%device1%%%path1%COMMAND.COM" not found ! set entry1=%result% && set result=
+if %done%==7 && call :setattrib "%device2%%%path2%command.com" "-a+r" "%device1%%%path1%command.com" "+m+l" "%entry1%" &; if not exist result && echo Attributes of %device2%%%path2%COMMAND.COM not set ! set /a done=%done%+1
+## Check all 'done' or 'roll-back' form last 'done'
+if %done%==8 && echo MS-DOS system files transferred succesfully, all attributes and dates/ time set accordingly && set result=1 && goto :eov ! echo Abort: MS-DOS system files transfer failed, wait for deleting partial copy... && set result=0
+if %done%==7 &; if not "%~3"=="" && set result= && set done= && call :setattrib "%device2%%%path2%%%~3" "-r" &; if exist result && set done=7 && set result= && call :setattrib "%device2%%%path2%%%command.com" "-r" &; if exist result && set done=6
+if %done%==7 &; if "%~3"=="" && set result= && set done= && call :setattrib "%device2%%%path2%%%command.com" "-r" &; if exist result && set done=6
+if %done%==6 && set result= &; if not %newmsdos%==N && call :setattrib "%device2%%%path2%msdos.sys" "-r" ! set done=5 &; if exist result && set done=5
+if %done%==5 && set result= && call :setattrib "%device2%%%path2%io.sys" "-r" &; if exist result && set done=4
+if not "%~3"=="" && if not %newmsdos%==N &; if %done%==1 && fat del %device2%%%path2%io.sys ! if %done%==2 && fat del %device2%%%path2%io.sys && fat del %device2%%%path2%msdos.sys ! if %done%==3 && fat del %device2%%%path2%io.sys && fat del %device2%%%path2%msdos.sys && fat del %device2%%%path2%%%~3 ! if %done%==4 && fat del %device2%%%path2%io.sys && fat del %device2%%%path2%msdos.sys && fat del %device2%%%path2%command.com && fat del %device2%%%path2%%%~3 ! if %done%==5 && fat del %device2%%%path2%msdos.sys && fat del %device2%%%path2%command.com && fat del %device2%%%path2%%%~3 ! if %done%==6 && fat del %device2%%%path2%command.com && fat del %device2%%%path2%%%~3 ! if %done%==7 && fat del %device2%%%path2%%%~3
+if not "%~3"=="" && if %newmsdos%==N &; if %done%==1 && fat del %device2%%%path2%io.sys ! if %done%==2 && fat del %device2%%%path2%io.sys ! if %done%==3 && fat del %device2%%%path2%io.sys && fat del %device2%%%path2%%%~3 ! if %done%==4 && fat del %device2%%%path2%io.sys && fat del %device2%%%path2%command.com && fat del %device2%%%path2%%%~3 ! if %done%==5 && fat del %device2%%%path2%command.com && fat del %device2%%%path2%%%~3 ! if %done%==6 && fat del %device2%%%path2%command.com && fat del %device2%%%path2%%%~3 ! if %done%==7 && fat del %device2%%%path2%%%~3
+if "%~3"=="" && if not %newmsdos%==N &; if %done%==1 && fat del %device2%%%path2%io.sys ! if %done%==2 && fat del %device2%%%path2%io.sys && fat del %device2%%%path2%msdos.sys ! if %done%==3 && fat del %device2%%%path2%io.sys && fat del %device2%%%path2%msdos.sys ! if %done%==4 && fat del %device2%%%path2%io.sys && fat del %device2%%%path2%msdos.sys && fat del %device2%%%path2%command.com ! if %done%==5 && fat del %device2%%%path2%msdos.sys && fat del %device2%%%path2%command.com ! if %done%==6 && fat del %device2%%%path2%command.com
+if "%~3"=="" && if %newmsdos%==N &; if %done%==1 && fat del %device2%%%path2%io.sys ! if %done%==2 && fat del %device2%%%path2%io.sys ! if %done%==3 && fat del %device2%%%path2%io.sys ! if %done%==4 && fat del %device2%%%path2%io.sys && fat del %device2%%%path2%command.com ! if %done%==5 && fat del %device2%%%path2%command.com ! if %done%==6 && fat del %device2%%%path2%command.com
+## Leave main routine, unload 'fat' and 'set' back original debug (always 'debug msg=3)
+:eov
+delmod -l fat > nul && delmod fat > nul
+debug %debugsts%
 debug msg=3
 endlocal && set result=%result%
 goto :eof
@@ -45,22 +80,39 @@ goto :eof
 : SUB-ROUTINES
 :---------------------------------------------------------------------------------------------------------------------------
 :fatcopy
-setlocal && set * && set "output=%output%"
+setlocal && set * && set "output2=%output2%"
 set source=%~f1
 set target=%~f2
 if exist %target% && call :setattrib "%target%" "-r" &; if exist result && fat del %target% && set deleted=Y && set result= ! endlocal && echo Abort: %target% exists, but can not be overwritten && set result=0 && goto :eof
 crc32 %source% > nul ;; set /A CRC32SRC=%@retval%&0xffffffff
 set c=1
 :fatcopyloop
-if not exist %target% && fat copy %source% %target% && set success=Y
+if not exist %target% && fat copy %o% %source% %target% && set success=Y
 crc32 %target% > nul ;; set /A CRC32TGT=%@retval%&0xffffffff
-if not %CRC32SRC%==%CRC32TGT% &; if %c%<=3 && set /a c=%c%+1 && goto :fatcopyloop ! echo Abort: Copy error in %target% && endlocal && set result=0 && set success= && goto :eof
-endlocal && set success=%success% && set "output=%output%"
+if not %CRC32SRC%==%CRC32TGT% &; if %c%<=3 && set /a c=%c%+1 && set o=/o && goto :fatcopyloop ! echo Abort: Copy error in %target% && endlocal && set result=0 && set success= && goto :eof
+endlocal && set success=%success% && set "output2=%output2%"
 goto :eof
-
+::
+:getsourceentry
+setlocal && set * && set "output1=%output1%"
+set device=%~d1
+set path=%~p1
+set name=%~n1
+set ext=%~x1
+set mdbase=0x3000
+set /A basemem=%mdbase% * 0x200
+if exist output1 && %output1%
+if not exist filesys && call :filesystem "%device%" &; if not /i "%filesys:~0,3%"=="fat" && endlocal && set result= && goto :eof
+if not exist output1 && call :bootblockbase "%device%" &; if %result%==0 && endlocal && set result= && goto :eof
+call :findpath "%path%" &; if %clusnum%==0 && endlocal && echo Path %device%%%path% not found && set result= && goto :eof
+call :findfile "%name%%%ext%"
+if not exist output1 && set "output1=set dataarea=%dataarea% && set clussize=%clussize% && set root=%root% && set fat1=%fat1% && set fat2=%fat2% && set secpfat=%secpfat% && set totsect=%totsect% && set secpclus=%secpclus% && set numclus=%numclus% && set fatsize=%fatsize% && set filesys=%filesys%"
+endlocal && set result=%entry% && set "output1=%output1%"
+goto :eof
+::
 :setattrib
-setlocal && set * && set "output=%output%"
-if exist output &; %output%
+setlocal && set * && set "output2=%output2%"
+if exist output2 &; %output2%
 debug msg=0
 set mode=setattrib
 set device=%~d1
@@ -70,14 +122,27 @@ set ext=%~x1
 set mdbase=0x3000
 set /A basemem=%mdbase% * 0x200
 if not exist filesys && call :filesystem "%device%" &; if not /i "%filesys:~0,3%"=="fat" && endlocal && set result= && goto :eof
-if not exist output && call :bootblockbase "%device%" &; if %result%==0 && endlocal && set result= && goto :eof
+if not exist output2 && call :bootblockbase "%device%" &; if %result%==0 && endlocal && set result= && goto :eof
 call :findpath "%path%" &; if %clusnum%==0 && endlocal && set result= && goto :eof
 call :findfile "%name%%%ext%" &; if not exist entry && endlocal && set result= && goto :eof
 call :attributes "%~2"
-if not exist output && set "output=set dataarea=%dataarea% && set clussize=%clussize% && set root=%root% && set fat1=%fat1% && set fat2=%fat2% && set secpfat=%secpfat% && set totsect=%totsect% && set secpclus=%secpclus% && set numclus=%numclus% && set fatsize=%fatsize% && set filesys=%filesys%"
-endlocal && set result=%result% && set "output=%output%"
+if not "%~4"=="+m+l" && goto :nodatestime
+if "%~5"=="" && goto :nodatestime
+set device1=%~d3
+set path1=%~p3
+set name1=%~n3
+set ext1=%~x3
+set sdentry=%~5 && set tdentry=%entry% && set entry=
+set /A srcsect=%sdentry%/0x200+1
+echo -n > (md)%mdbase%+1
+raw dd if=%device1%%0+%srcsect% of=(md)%mdbase%+1 bs=1 skip=%sdentry% count=32 || echo can not copy directory-entry %sdentry% of %path1%%%name1%%%ext1% from %device1% && goto :nodatestime ! set success=Y
+set /A tdwrttd=%tdentry%+22
+if exist sdentry && if exist tdentry && if %success%==Y && set success= && if exist tdwrttd &; raw dd if=(md)%mdbase%+1 of=%device%%0+%totsect% bs=1 count=4 skip=22 seek=%tdwrttd% || echo can not copy modifiaction date and time to %path%%%name%%%ext% on %device% && goto :nodatestime
+:nodatestime
+if not exist output2 && set "output2=set dataarea=%dataarea% && set clussize=%clussize% && set root=%root% && set fat1=%fat1% && set fat2=%fat2% && set secpfat=%secpfat% && set totsect=%totsect% && set secpclus=%secpclus% && set numclus=%numclus% && set fatsize=%fatsize% && set filesys=%filesys%"
+endlocal && set result=%result% && set "output2=%output2%"
 goto :eof
-
+::
 :attributes
 setlocal
 set /A address=%basemem%+0xB &; read %address% ;; set /A attrib=%@retval%&0xff
@@ -99,7 +164,7 @@ if %changed%==Y && set /A addattr2=%bit0%+%bit1%+%bit2%+%bit3%+%bit4%+%bit5%+%bi
 if %changed%==Y && set /A attentry=%entry%+0xB &; raw write --offset=%attentry% %device%%0+%totsect% \x%addattr2:~2% > nul && set result=1
 endlocal && set result=%result% && set addattr2=%addattr2%
 goto :eof
-
+::
 :findfile
 if "%path%"=="/" && set clusnum=2
 setlocal
@@ -113,7 +178,7 @@ if exist entry && if not %success%==Y && echo -n > (md)%mdbase%+1 && raw dd if=%
 if not exist entry && if %bytedone%>=%dataarea% && if not %bytedone%>=%devsize% && if exist clusnum &; call :lookupFAT "%clusnum%" &; if %clusnum%>=2 && set /A bytedone=%clusnum% - 0x2 * %clussize% + %dataarea% && set /A dirlen=%clussize% && goto :findfileloop
 endlocal && set success=%success% && set clusnum=%clusnum% && set bytedone=%bytedone% && set dirlen=%dirlen% && set entry=%entry% && set ENTRY=%ENTRY% && set sfnpath=%sfnpath% && set lastclus=%lastclus%
 goto :eof
-
+::
 :lookupFAT
 setlocal
 set clusnum=%~1 &; set lastclus=%clusnum%
@@ -125,7 +190,7 @@ if /i "%filesys%"=="fat12" &; calc %lastclus% % 2 &; set /A address=%clusnum% / 
 if %clusnum%==1 && set clusnum=0
 endlocal && set clusnum=%clusnum% && set lastclus=%lastclus%
 goto :eof
-
+::
 :readdisk
 setlocal && set * && set device=%device% && set totsect=%totsect%
 set /A skip=%~1 &; set /a s=%@retval%
@@ -133,7 +198,7 @@ raw cat --hex --skip=%skip% --length=4 %device%%0+%totsect% | set LE= &; if %s%<
 if not "%LE:~9,1%"==" " && set result=0x%LE:~9,2%%%LE:~6,2%%%LE:~3,2%%%LE:~0,2% ! if not "%LE:~6,1%"==" " && set result=0x%LE:~6,2%%%LE:~3,2%%%LE:~0,2% ! if not "%LE:~3,1%"==" " && set result=0x%LE:~3,2%%%LE:~0,2% ! if not "%LE:~0,1%"==" " && set result=0x%LE:~0,2%
 endlocal && set result=%result%
 goto :eof
-
+::
 :catfile
 setlocal && set *
 set /u NAME=%~n1 &; set /a namelen=%@retval% &; if %namelen%<=7 && call :spread "NAME" "%namelen%" &; set NAME=%NAME%%%spread% && set spread=
@@ -141,7 +206,7 @@ set /u EXT=%~x1 ;; set EXT=%EXT:~1% ;; set /a extlen=%@retval% &; if exist EXT &
 if %namelen%>=1 && if %namelen%<=8 &; if not exist EXT && set ENTRY=%NAME%\x20\x20\x20 ! if %extlen%<=3 && set ENTRY=%NAME%%%EXT%
 endlocal && set ENTRY=%ENTRY%
 goto :eof
-
+::
 :spread
 setlocal && set *
 set "message=%~1"
@@ -153,17 +218,61 @@ set c=1
 if %c%<=%spaces% && set "spread=%spread%%%char%" && set /a c=%c%+1 && goto :spreadloop
 endlocal && set "spread=%spread%"
 goto :eof
-
+::
 :findpath
 setlocal
 set "path=%~1"
 if /i "%filesys%"=="fat32" && set bytedone=%dataarea% && set /A dirlen=%clussize%
 if not /i "%filesys%"=="fat32" && set bytedone=%root% && set /A dirlen=%dataarea%-%root%
 if "%path%"=="/" && endlocal && set bytedone=%bytedone% && set dirlen=%dirlen% && set sfnpath=/ && goto :eof
-
+echo "%path%" > (md)%mdbase%+1
+#NONEED:SFNonly#call Fn.11 "%path%" " " && call :lsspaces
+cat --locate=/ --replace=\x20 (md)%mdbase%+1 > nul
+cat --locate=\x22 --replace=\x20 (md)%mdbase%+1 > nul
+set clusnum=2 && set sfnpath=/ && cat (md)%mdbase%+1 | call :finddirectory
+#OKE#echo %0 entry=%entry%
+endlocal && set clusnum=%clusnum% && set bytedone=%bytedone% && set dirlen=%dirlen% && set entry=%entry% && set sfnfile=%sfnfile% && set sfnpath=%sfnpath% && set lfnentry=%lfnentry%
+goto :eof
+::
+:lsspaces
+#-# replace spaces for LS (escaped) spaces: '\ '
+setlocal
+set numspace= && set /A skip=0
+cat --locate=\x20 (md)%mdbase%+1 > nul ;; set /a numspace=%@retval%
+if %numspace%==0 && endlocal && goto :eof
+:looplsspaces
+cat --skip=%skip% --locate=\x20 --number=1 (md)%mdbase%+1 > nul &; set /a skip=%?%
+set /A seek=%skip%+1
+raw dd if=(md)%mdbase%+1 of=(md)%mdbase%+1 bs=1 skip=%skip% seek=%seek% > nul
+cat --skip=%skip% --locate=\x20 --replace=\x5C --number=1 (md)%mdbase%+1 > nul
+set /a numspace=%numspace% - 1
+if %numspace%==0 && endlocal && set lsspaces=Y && goto :eof
+set /A skip=%skip% + 2
+goto :looplsspaces
+::
+:finddirectory
+#-# find disk-address and cluster number of last directory in PATH
+if "%1"=="" && goto :eof
+set "argname=%~n1" && set "argext=%~x1"
+set sfnpath=%sfnpath%%%argname%%%argext%/ && set ENTRY= && call :catfile "%~1"
+set /A address=%basemem%+0x1A
+set offset=%bytedone% && set search=%dirlen% && set /A endentry=%bytedone%+%dirlen%-0x20
+:finddirectoryloop
+set entry= && set success= && set argname= && set argext=
+raw cat --skip=%offset% --locate="%ENTRY%" --length=%search% --number=1 %device%%0+%totsect% | set entry= &; if exist entry && set /A entry=0x%entry% &; if %entry%>=%offset% && calc 0x%entry:~-2,2% % 0x20 &; set /A offset=%entry%-%@retval%+0x20 &; if %offset%<=%endentry% && set /A search=%bytedone%-%offset%+%dirlen% && goto :finddirectoryloop ! set entry=
+if exist entry && if not %entry%>=%offset% && echo BAD directory search && goto :eof
+if exist entry && if not %success%==Y && echo -n > (md)%mdbase%+1 && raw dd if=%device%%0+%totsect% of=(md)%mdbase%+1 bs=1 count=0x20 skip=%entry% > nul && set success=Y
+if %success%==Y && if /i %filesys%==fat32 && read %address% &; set /A clusnumL=%@retval%&0xffff &; set clusnumL=0000%clusnumL:~2% && set /A address=%address%-0x6 &; read %address% &; set /A clusnumH=%@retval%&0xffff &; if %clusnumH%==0x0 && set /A clusnum=0x%clusnumL:~-4,4% ! set clusnum=%clusnumH%%%clusnumL:~-4,4%
+if %success%==Y && if not /i %filesys%==fat32 && read %address% &; set /A clusnum=%@retval%&0xffff
+if not exist entry && if exist clusnum && if %bytedone%>=%dataarea% && call :lookupFAT "%clusnum%" &; if %clusnum%>=2 && set /A bytedone=%clusnum% - 0x2 * %clussize% + %dataarea% && set /A dirlen=%clussize% &; set offset=%bytedone% && set search=%dirlen% && set /A endentry=%bytedone%+%dirlen%-0x20 && goto :finddirectoryloop
+if exist entry && if %success%==Y && set /A bytedone=%clusnum% - 0x2 * %clussize% + %dataarea% && set /A dirlen=%clussize%
+if not %clusnum%==0 && shift ! goto :eof
+goto :finddirectory
+::
 :filesystem
 setlocal && set * && set mdbase=%mdbase%
 set device=%~1
+if not exist mdbase && set mdbase=0x3000
 echo -n > (md)%mdbase%+1
 errorcheck off
 debug msg=1
@@ -173,10 +282,31 @@ if exist device && cat --locate=\x0A --number=1 (md)%mdbase%+1 > nul &; set /a s
 #BAD#if exist device && set filesys=fat12 &; cat --locatei=%filesys% (md)%mdbase%+1 > nul || set filesys=fat16 &; cat --locatei=%filesys% (md)%mdbase%+1 > nul || set filesys=fat32 &; cat --locatei=%filesys% (md)%mdbase%+1 > nul || set filesys=initrdfs &; cat --locatei=%filesys% (md)%mdbase%+1 > nul || set filesys=
 endlocal && set filesys=%filesys%
 goto :eof
-
+::
+:shiftrootentries
+setlocal && set * && set mdbase=%mdbase%
+set device=%~1
+if not exist mdbase && set mdbase=0x3000
+call :bootblockbase "%device%" &; if %root%<=0x400 && endlocal && set result=0 && goto :eof ! if %dataarea%<=0x600 && endlocal && set result=0 && goto :eof
+set result=0
+## Check if already good
+set entry1=%root% && set /A entry2=%root%+0x20 && set /A entry3=%root%+0x40
+raw cat --skip=%entry1% --locate=\x00 --length=1 %device%%0+%totsect% > nul && raw cat --skip=%entry2% --locate=\x00 --length=1 %device%%0+%totsect% > nul && endlocal && set result=1 && goto :eof
+raw cat --skip=%entry1% --locate=\xE5 --length=1 %device%%0+%totsect% > nul && raw cat --skip=%entry2% --locate=\x00 --length=1 %device%%0+%totsect% > nul && endlocal && set result=1 && goto :eof
+raw cat --skip=%entry1% --locate=\xE5 --length=1 %device%%0+%totsect% > nul && raw cat --skip=%entry2% --locate=\xE5 --length=1 %device%%0+%totsect% > nul && endlocal && set result=1 && goto :eof
+## Copy first two entries to memory
+raw dd if=%device%%0+%totsect% of=(md)%mdbase%+1 bs=1 count=64 skip=%root% || endlocal && set result=0 && goto :eof
+## Copy first two entries from memory back to root starting at third entry
+raw dd if=(md)%mdbase%+1 of=%device%%0+%totsect% bs=1 count=64 seek=%entry3% || endlocal && set result=0 && goto :eof
+## Set first TWO entries to deleted with E5
+raw write --offset=%entry1% %device%%0+%totsect% \xE5 > nul && raw write --offset=%entry2% %device%%0+%totsect% \xE5 > nul && set result=1
+endlocal && set result=%result%
+goto :eof
+::
 :bootblockbase
 setlocal && set * && set mdbase=%mdbase% && set filesys=%filesys%
 set device=%~1
+if not exist mdbase && set mdbase=0x3000
 echo -n > (md)%mdbase%+1
 dd if=%device%%0+1 of=(md)%mdbase%+1 > nul
 set /A base=%mdbase% * 0x200
@@ -219,20 +349,27 @@ set /A fat1=%rsrvbyte%
 #NOTNEEDED#set /A numclus=-%dataarea% / 0x200 + %totsect% / %secpclus%
 endlocal && set dataarea=%dataarea% && set clussize=%clussize% && set root=%root% && set fat1=%fat1% && set secpfat=%secpfat% && set totsect=%totsect% && set secpclus=%secpclus%
 goto :eof
-
+::
 :help
-echo COPYSYS.G4B v0.4.2 (20241018), by deomsh
+echo COPYSYS.G4B v0.5 (20241116), by deomsh
 echo Function: copy MS-DOS' IO.SYS, MSDOS.SYS, COMMAND.COM
-echo $[]          from ONE specified directory to target and set attributes
-echo $[]          Optional copy DRVSPACE.BIN/ DBLSPACE.BIN
-echo Use:      COPYSYS.G4B <[DEVICE1]PATH1> <DEVICE2> [<DRVSPACE.BIN|DBLSPACE.BIN>]
+echo $[]           from ONE specified directory to target and set attributes
+echo $[]           Optional copy DRVSPACE.BIN/ DBLSPACE.BIN/ somefile
+echo Use 1:  COPYSYS.G4B [DEVICE1]PATH1 DEVICE2 [DRVSPACE.BIN|DBLSPACE.BIN|somefile]
+echo Use 2:  COPYSYS.G4B [/?] (this screen) && echo
 echo Remarks:
-echo Grubutil FAT needed
-echo If source device is not given, from root-device
+echo If source device is not given: on root-device ('/' is still needed)
 echo Short File Names in PATH1 only
-echo Third switch: file name only!
-echo Does not overwrite existing MSDOS.SYS!
+echo Third switch: full file name only! Instead of DRVSPACE.BIN or DBLSPACE.BIN one
+echo $[] other file can be copied (but attributes will NOT be set to 'RSH'!)
+echo Does not shift directory-entries in root, disk MUST be empty up to MS-DOS 6.22
+echo $[] Empty disk with volume-label (MS-DOS <=6.22): label is shifted up two entries
+echo Asks to overwrite existing MSDOS.SYS on target, other files ALWAYS overwritten
+echo FAT-source: Modification Date and Modification Time set on copied target-files && echo
+echo Grubutil FAT needed in: %^~dp0, (bd), (bd)/GRUB, (bd)/G4DLL, or ROOT && echo
 echo Example 1: COPYSYS.G4B (hd0,0) (fd1)
-echo Example 2: COPYSYS.G4B (fd1)/system/ (hd1,0) DRVSPACE.BIN
-echo Example 3: COPYSYS.G4B (fd0) (hd0,0) DBLSPACE.BIN
+echo Example 2: COPYSYS.G4B (hd0,0)/MSDOS622/ (rd)
+echo Example 3: COPYSYS.G4B (fd1)/system/ (hd1,0) DRVSPACE.BIN
+echo Example 4: COPYSYS.G4B (fd0) (hd1,0) DBLSPACE.BIN
+echo Example 5: COPYSYS.G4B (fd0) (rd) SYS.COM
 goto :eof
