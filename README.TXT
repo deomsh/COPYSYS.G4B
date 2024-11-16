@@ -43,7 +43,7 @@ v0.5
 1) if LABEL is present on MSDOS<=6.22 shift to THIRD entry and write E5 to first TWO entries for IO.SYS/MSDOS.SYS (if needed)
 2) if MSDOS <=6.22 start only if root of target device is fully empty and not FAT32
 3) MSDOS <=6.22 'detected' if MSDOS.SYS >=4KB
-4) Grub4Dos: >=20170505 checked
+4) Grub4Dos: version >=20170505 checked
 5) attributes copied from fat32 or from source-directory other than '/'
 6) more protection - some command-lines not accepted
 7) 'COPYSYS /?' for help too
