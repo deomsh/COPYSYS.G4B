@@ -51,6 +51,7 @@ v0.5
 9) insmods/ delmod fat
 10) give back original debug status
 11) copy modification date/-time
+12) more help with more examples
 
 v0.4.2:  
 Protected against other number of File Allocation Tables than one or two (number of FAT's: 1 or 2)  
