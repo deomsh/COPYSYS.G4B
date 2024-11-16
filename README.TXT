@@ -47,11 +47,10 @@ v0.5
 5) attributes copied from fat32 or from source-directory other than '/'
 6) more protection - some command-lines not accepted
 7) 'COPYSYS /?' for help too
-8) ask to overwrite existing MSDOS.SYS (no MSDOS.BAK needed anymore)
+8) ask to overwrite existing MSDOS.SYS
 9) insmods/ delmod fat
 10) give back original debug status
-11) copy modification date/-time (except for 'other' third file)
-12) not copy Last Access Date anymore (will be earlier than creation date!)
+11) copy modification date/-time
 
 v0.4.2:  
 Protected against other number of File Allocation Tables than one or two (number of FAT's: 1 or 2)  
