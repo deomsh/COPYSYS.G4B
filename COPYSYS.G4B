@@ -1,5 +1,5 @@
 !BAT
-#-#+ COPYSYS.G4B v0.5 (20241116), by deomsh
+#-#+ COPYSYS.G4B v0.6 (20250203), by deomsh
 #-#+ Function: copy MS-DOS' IO.SYS, MSDOS.SYS, COMMAND.COM and optional DRVSPACE.BIN/ DBLSPACE.BIN or ONE other file from ONE specified directory to target and set attributes (not fot 'other' file)
 #-#+ Use: COPYSYS.G4B <[DEVICE1]PATH1> <DEVICE2> [<DRVSPACE.BIN|DBLSPACE.BIN|somefile>]
 #-#+ Remarks: grubutil FAT needed. If source device is not given, from root-device. Short Names in PATH1 only! Third switch: file name only!
@@ -44,6 +44,7 @@ if %done%==2 && if not "%~3"=="" && call :fatcopy "%device1%%%path1%%%~3" "%devi
 ## Copy COMMAND.COM
 if %done%==3 && call :fatcopy "%device1%%%path1%command.com" "%device2%%%path2%command.com" &; if %success%==Y && set /a done=%done%+1 && set success=
 ## Get/ set source attribute and date/ time for IO.SYS
+#OKE#echo device1=%device1% path1=%path1%
 if %done%==4 && set entry1= && fat info %device1% > nul && call :getsourceentry "%device1%%%path1%io.sys" &; if not exist result && echo Directory-entry "%device1%%%path1%IO.SYS" not found ! set entry1=%result% && set result=
 if %done%==4 && call :setattrib "%device2%%%path2%io.sys" "-a+r+s+h" "%device1%%%path1%io.sys" "+m+l" "%entry1%" &; if not exist result && echo Attributes of %device2%%%path2%IO.SYS not set ! set /a done=%done%+1
 ## Get/ set source attribute and date/ time for MSDOS.SYS if needed
@@ -106,7 +107,7 @@ if not exist filesys && call :filesystem "%device%" &; if not /i "%filesys:~0,3%
 if not exist output1 && call :bootblockbase "%device%" &; if %result%==0 && endlocal && set result= && goto :eof
 call :findpath "%path%" &; if %clusnum%==0 && endlocal && echo Path %device%%%path% not found && set result= && goto :eof
 call :findfile "%name%%%ext%"
-if not exist output1 && set "output1=set dataarea=%dataarea% && set clussize=%clussize% && set root=%root% && set fat1=%fat1% && set fat2=%fat2% && set secpfat=%secpfat% && set totsect=%totsect% && set secpclus=%secpclus% && set numclus=%numclus% && set fatsize=%fatsize% && set filesys=%filesys%"
+if not exist output1 && set "output1=set dataarea=%dataarea% && set clussize=%clussize% && set root=%root% && set fat1=%fat1% && set fat2=%fat2% && set secpfat=%secpfat% && set totsect=%totsect% && set secpclus=%secpclus% && set numclus=%numclus% && set fatsize=%fatsize% && set filesys=%filesys% && set bytepsec=%bytepsec%"
 endlocal && set result=%entry% && set "output1=%output1%"
 goto :eof
 ::
@@ -139,7 +140,7 @@ raw dd if=%device1%%0+%srcsect% of=(md)%mdbase%+1 bs=1 skip=%sdentry% count=32 |
 set /A tdwrttd=%tdentry%+22
 if exist sdentry && if exist tdentry && if %success%==Y && set success= && if exist tdwrttd &; raw dd if=(md)%mdbase%+1 of=%device%%0+%totsect% bs=1 count=4 skip=22 seek=%tdwrttd% || echo can not copy modifiaction date and time to %path%%%name%%%ext% on %device% && goto :nodatestime
 :nodatestime
-if not exist output2 && set "output2=set dataarea=%dataarea% && set clussize=%clussize% && set root=%root% && set fat1=%fat1% && set fat2=%fat2% && set secpfat=%secpfat% && set totsect=%totsect% && set secpclus=%secpclus% && set numclus=%numclus% && set fatsize=%fatsize% && set filesys=%filesys%"
+if not exist output2 && set "output2=set dataarea=%dataarea% && set clussize=%clussize% && set root=%root% && set fat1=%fat1% && set fat2=%fat2% && set secpfat=%secpfat% && set totsect=%totsect% && set secpclus=%secpclus% && set numclus=%numclus% && set fatsize=%fatsize% && set filesys=%filesys% && set bytepsec=%bytepsec%"
 endlocal && set result=%result% && set "output2=%output2%"
 goto :eof
 ::
@@ -169,6 +170,7 @@ goto :eof
 if "%path%"=="/" && set clusnum=2
 setlocal
 call :catfile "%name%%%ext%"
+set /A devsize=%totsect% * %bytepsec%
 :findfileloop
 set entry= && set success=
 cat --skip=%bytedone% --locate="%ENTRY%" --length=%dirlen% --number=1 %device%%0+%totsect% | set entry= &; if exist entry && set entry=0x%entry%
@@ -230,7 +232,6 @@ echo "%path%" > (md)%mdbase%+1
 cat --locate=/ --replace=\x20 (md)%mdbase%+1 > nul
 cat --locate=\x22 --replace=\x20 (md)%mdbase%+1 > nul
 set clusnum=2 && set sfnpath=/ && cat (md)%mdbase%+1 | call :finddirectory
-#OKE#echo %0 entry=%entry%
 endlocal && set clusnum=%clusnum% && set bytedone=%bytedone% && set dirlen=%dirlen% && set entry=%entry% && set sfnfile=%sfnfile% && set sfnpath=%sfnpath% && set lfnentry=%lfnentry%
 goto :eof
 ::
@@ -347,11 +348,11 @@ set /A clussize=%secpclus% * %bytepsec%
 set /A fat1=%rsrvbyte%
 #NOTNEEDED#set /A fat2=%fatbyte% / 2 + %rsrvbyte%
 #NOTNEEDED#set /A numclus=-%dataarea% / 0x200 + %totsect% / %secpclus%
-endlocal && set dataarea=%dataarea% && set clussize=%clussize% && set root=%root% && set fat1=%fat1% && set secpfat=%secpfat% && set totsect=%totsect% && set secpclus=%secpclus%
+endlocal && set dataarea=%dataarea% && set clussize=%clussize% && set root=%root% && set fat1=%fat1% && set secpfat=%secpfat% && set totsect=%totsect% && set secpclus=%secpclus% && set bytepsec=%bytepsec%
 goto :eof
 ::
 :help
-echo COPYSYS.G4B v0.5 (20241116), by deomsh
+echo COPYSYS.G4B v0.6 (20250203), by deomsh
 echo Function: copy MS-DOS' IO.SYS, MSDOS.SYS, COMMAND.COM
 echo $[]           from ONE specified directory to target and set attributes
 echo $[]           Optional copy DRVSPACE.BIN/ DBLSPACE.BIN/ somefile
