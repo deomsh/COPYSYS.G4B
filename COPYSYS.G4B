@@ -1,5 +1,5 @@
 !BAT
-#-#+ COPYSYS.G4B v0.6 (20250203), by deomsh
+#-#+ COPYSYS.G4B v0.6.1 (20250827), by deomsh
 #-#+ Function: copy MS-DOS' IO.SYS, MSDOS.SYS, COMMAND.COM and optional DRVSPACE.BIN/ DBLSPACE.BIN or ONE other file from ONE specified directory to target and set attributes (not fot 'other' file)
 #-#+ Use: COPYSYS.G4B <[DEVICE1]PATH1> <DEVICE2> [<DRVSPACE.BIN|DBLSPACE.BIN|somefile>]
 #-#+ Remarks: grubutil FAT needed. If source device is not given, from root-device. Short Names in PATH1 only! Third switch: file name only!
@@ -103,11 +103,14 @@ set ext=%~x1
 set mdbase=0x3000
 set /A basemem=%mdbase% * 0x200
 if exist output1 && %output1%
+#OKE#echo %0 0 filesys=%filesys%
 if not exist filesys && call :filesystem "%device%" &; if not /i "%filesys:~0,3%"=="fat" && endlocal && set result= && goto :eof
 if not exist output1 && call :bootblockbase "%device%" &; if %result%==0 && endlocal && set result= && goto :eof
+#OKE#echo %0 1 filesys=%filesys%
 call :findpath "%path%" &; if %clusnum%==0 && endlocal && echo Path %device%%%path% not found && set result= && goto :eof
 call :findfile "%name%%%ext%"
 if not exist output1 && set "output1=set dataarea=%dataarea% && set clussize=%clussize% && set root=%root% && set fat1=%fat1% && set fat2=%fat2% && set secpfat=%secpfat% && set totsect=%totsect% && set secpclus=%secpclus% && set numclus=%numclus% && set fatsize=%fatsize% && set filesys=%filesys% && set bytepsec=%bytepsec%"
+#OKE#echo %0 entry=%entry%
 endlocal && set result=%entry% && set "output1=%output1%"
 goto :eof
 ::
@@ -175,8 +178,6 @@ set /A devsize=%totsect% * %bytepsec%
 set entry= && set success=
 cat --skip=%bytedone% --locate="%ENTRY%" --length=%dirlen% --number=1 %device%%0+%totsect% | set entry= &; if exist entry && set entry=0x%entry%
 if exist entry && if not %success%==Y && echo -n > (md)%mdbase%+1 && raw dd if=%device%%0+%totsect% of=(md)%mdbase%+1 bs=1 count=0x20 skip=%entry% > nul && set success=Y
-#NOTNEEDED#if %success%==Y && if /i "%filesys%"=="fat32" && read %address% &; set /A clusnumL=%@retval%&0xffff &; set clusnumL=0000%clusnumL:~2% && set /A address=%address%-0x6 &; read %address% &; set /A clusnumH=%@retval%&0xffff &; if %clusnumH%==0x0 && set /A clusnum=0x%clusnumL:~-4,4% ! set clusnum=%clusnumH%%%clusnumL:~-4,4%
-#NOTNEEDED#if %success%==Y && if not /i "%filesys%"=="fat32" && read %address% &; set /A clusnum=%@retval%&0xffff
 if not exist entry && if %bytedone%>=%dataarea% && if not %bytedone%>=%devsize% && if exist clusnum &; call :lookupFAT "%clusnum%" &; if %clusnum%>=2 && set /A bytedone=%clusnum% - 0x2 * %clussize% + %dataarea% && set /A dirlen=%clussize% && goto :findfileloop
 endlocal && set success=%success% && set clusnum=%clusnum% && set bytedone=%bytedone% && set dirlen=%dirlen% && set entry=%entry% && set ENTRY=%ENTRY% && set sfnpath=%sfnpath% && set lastclus=%lastclus%
 goto :eof
@@ -228,7 +229,6 @@ if /i "%filesys%"=="fat32" && set bytedone=%dataarea% && set /A dirlen=%clussize
 if not /i "%filesys%"=="fat32" && set bytedone=%root% && set /A dirlen=%dataarea%-%root%
 if "%path%"=="/" && endlocal && set bytedone=%bytedone% && set dirlen=%dirlen% && set sfnpath=/ && goto :eof
 echo "%path%" > (md)%mdbase%+1
-#NONEED:SFNonly#call Fn.11 "%path%" " " && call :lsspaces
 cat --locate=/ --replace=\x20 (md)%mdbase%+1 > nul
 cat --locate=\x22 --replace=\x20 (md)%mdbase%+1 > nul
 set clusnum=2 && set sfnpath=/ && cat (md)%mdbase%+1 | call :finddirectory
@@ -280,7 +280,6 @@ debug msg=1
 if exist device && vol %device% > (md)%mdbase%+1
 debug msg=0
 if exist device && cat --locate=\x0A --number=1 (md)%mdbase%+1 > nul &; set /a skip=%?% &; set filesys=fat12 &; cat --skip=%skip% --locate=%filesys% (md)%mdbase%+1 > nul |; set filesys=fat16 &; cat --skip=%skip% --locate=%filesys% (md)%mdbase%+1 > nul |; set filesys=fat32 &; cat --skip=%skip% --locate=%filesys% (md)%mdbase%+1 > nul |; set filesys=initrdfs &; cat --skip=%skip% --locate=%filesys% (md)%mdbase%+1 > nul |; set filesys=
-#BAD#if exist device && set filesys=fat12 &; cat --locatei=%filesys% (md)%mdbase%+1 > nul || set filesys=fat16 &; cat --locatei=%filesys% (md)%mdbase%+1 > nul || set filesys=fat32 &; cat --locatei=%filesys% (md)%mdbase%+1 > nul || set filesys=initrdfs &; cat --locatei=%filesys% (md)%mdbase%+1 > nul || set filesys=
 endlocal && set filesys=%filesys%
 goto :eof
 ::
@@ -338,7 +337,8 @@ read %address% > nul ;; set /A secpfat=%@retval%&0xffff
 if %totsect%==0 && set /A address=%base%+0x20
 if %totsect%==0 && read %address% > nul &; set /A totsect=%@retval%&0xffffffff
 if %secpfat%==0 && if /i "%filesys%"=="fat32" && set /A address=%base%+0x24
-if %secpfat%==0 && if /i "%filesys%"=="fat32" && read %address% > nul &; set /A secpfat=%@retval%&0xffff
+if %secpfat%==0 && if /i "%filesys%"=="fat32" && read %address% > nul &; set /A secpfat=%@retval%&0xffffffff
+#BAD=16bits#if %secpfat%==0 && if /i "%filesys%"=="fat32" && read %address% > nul &; set /A secpfat=%@retval%&0xffff
 set /A rootbyte=%rootentr% * 32
 set /A fatbyte=%numfats% * %secpfat% * %bytepsec%
 set /A rsrvbyte=%reserved% * %bytepsec%
@@ -352,7 +352,7 @@ endlocal && set dataarea=%dataarea% && set clussize=%clussize% && set root=%root
 goto :eof
 ::
 :help
-echo COPYSYS.G4B v0.6 (20250203), by deomsh
+echo COPYSYS.G4B v0.6.1 (20250827), by deomsh
 echo Function: copy MS-DOS' IO.SYS, MSDOS.SYS, COMMAND.COM
 echo $[]           from ONE specified directory to target and set attributes
 echo $[]           Optional copy DRVSPACE.BIN/ DBLSPACE.BIN/ somefile
